@@ -36,7 +36,7 @@ def load_models():
                 model='gemini-2.0-flash', 
                 google_api_key=gemini_api_key
             )
-            st.success("✅ Google Gemini LLM loaded successfully!")
+            # st.success("✅ Google Gemini LLM loaded successfully!")
         else:
             llm = None
             st.warning("⚠️ Gemini API key not found in .env file. Running in demo mode without LLM.")
@@ -53,7 +53,7 @@ def load_models():
                 "HuggingFaceTB/SmolVLM-256M-Instruct",
                 token=huggingface_key
             )
-            st.success("✅ Vision Language Model loaded successfully!")
+            # st.success("✅ Vision Language Model loaded successfully!")
         except Exception as e:
             vlm_processor = None
             vlm_model = None
@@ -135,6 +135,16 @@ def get_formatted_date():
         month = str(now.month).lstrip('0')
         year = now.strftime("%y")
         return f"{day}-{month}-{year}"
+    
+def display_logo():
+    """Display the logo image."""
+    # Adjusted to keep logo properly positioned within the frame
+    logo_html = """
+    <div style="display: flex; justify-content: flex-start; align-items: center; padding-left: 15px; padding-top: 10px;">
+        <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT7zBX4VmSnYfD1Ismi7kk8MCDAGd-tPJrQwQ&s" alt="Logo" width="80" height="80">
+    </div>
+    """
+    st.markdown(logo_html, unsafe_allow_html=True)
 
 def start_new_chat():
     """Start a new chat session."""
@@ -335,7 +345,8 @@ def set_custom_css():
 # =========================
 # ----- SESSION STATE -----
 # =========================
-
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
 if "uploaded_files" not in st.session_state:
     st.session_state.uploaded_files = []
 if "doc_states" not in st.session_state:
@@ -489,22 +500,56 @@ def handle_message_submit():
 # =========================
 
 def user_interface():
-    """Render the user interface."""
-    # Header section with logo, title, and user info
-    col1, col2, col3 = st.columns([1, 2, 1])
+    """Render the user interface with increased top padding to lower the header."""
+    # Significantly increase top padding to push everything further down
+    st.markdown("<div style='height: 45px;'></div>", unsafe_allow_html=True)
+    header_container = st.container()
     
-    with col1:
-        st.write("LOGO")
+    with header_container:
+        # Keep the same column ratio
+        logo_col, title_col, info_col = st.columns([2, 3, 2])
+        
+        with logo_col:
+            # Keep the same logo positioning
+            st.markdown("""
+            <div style="display: flex; align-items: center; height: 80px; padding-left: 20px; padding-top: 15px;">
+                <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT7zBX4VmSnYfD1Ismi7kk8MCDAGd-tPJrQwQ&s" alt="Logo" width="65" height="65" style="float: left;">
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with title_col:
+            # Keep title margin the same
+            st.markdown("<h2 style='text-align: center; margin-top: 25px;'>Document Q&A System</h2>", unsafe_allow_html=True)
+        
+        with info_col:
+            # Keep user info the same
+            st.markdown(f"""
+            <div style="text-align: right; margin-top: 20px; padding-right: 15px;">
+                <div>Logged in: {st.session_state.username}</div>
+                <div>Current time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
+            </div>
+            """, unsafe_allow_html=True)
     
-    with col2:
-        st.markdown("<h2 style='text-align: center;'>PROJECT NAME</h2>", unsafe_allow_html=True)
+    # Keep minimal spacing after header content
+    st.markdown("<div style='height: 2px;'></div>", unsafe_allow_html=True)
     
-    with col3:
-        st.write(f"Logged in: {st.session_state.username}")
-        if st.button("🔒 Admin", key="switch_to_admin"):
+    # Create another row of columns for the buttons
+    _, _, button_space, admin_col, logout_col = st.columns([1, 1, 1, 0.5, 0.5])
+    
+    with admin_col:
+        if st.button("🔒 Admin", key="user_to_admin_switch", use_container_width=True):
             st.session_state.is_admin = True
             st.rerun()
     
+    with logout_col:
+        if st.button("🚪 Logout", key="user_logout_button", use_container_width=True):
+            st.session_state.logged_in = False
+            st.rerun()
+    
+    # Add a separator after the header
+    st.markdown("<hr style='margin: 10px 0; opacity: 0.3;'>", unsafe_allow_html=True)
+    
+    # The rest of your function remains unchanged
     # Main content section with chat on left and history on right
     chat_col, history_col = st.columns([3, 1])
     
@@ -544,11 +589,24 @@ def user_interface():
                     </div>
                     """, unsafe_allow_html=True)
         
-        # Input area - using on_change callback
-        st.text_input("Type your message here...", 
-                     key="message_input",
-                     on_change=handle_message_submit,
-                     label_visibility="collapsed")
+        # Create a row with text input and send button
+        input_col, button_col = st.columns([5, 1])
+        
+        with input_col:
+            # Input area with standard callback 
+            st.text_input("Type your message here...", 
+                         key="message_input",
+                         on_change=handle_message_submit,
+                         label_visibility="collapsed")
+        
+        with button_col:
+            # Add a send button
+            if st.button("Send", key="send_button", use_container_width=True):
+                # Only process if there's text in the input
+                if "message_input" in st.session_state and st.session_state.message_input.strip():
+                    # Call the same handler function that's used for the on_change event
+                    handle_message_submit()
+                    st.rerun()
     
     with history_col:
         st.markdown("### Chat History")
@@ -595,22 +653,56 @@ def user_interface():
 # =========================
 
 def admin_interface():
-    """Render the admin interface."""
-    # Header section
-    col1, col2, col3 = st.columns([1, 2, 1])
+    """Render the admin interface with improved header positioning."""
+    # Significantly increase top padding to push everything further down
+    st.markdown("<div style='height: 45px;'></div>", unsafe_allow_html=True)
+    header_container = st.container()
     
-    with col1:
-        st.write("LOGO")
+    with header_container:
+        # Keep the same column ratio
+        logo_col, title_col, info_col = st.columns([2, 3, 2])
+        
+        with logo_col:
+            # Adjust logo positioning to be more to the left with padding
+            st.markdown("""
+            <div style="display: flex; align-items: center; height: 80px; padding-left: 20px; padding-top: 15px;">
+                <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT7zBX4VmSnYfD1Ismi7kk8MCDAGd-tPJrQwQ&s" alt="Logo" width="65" height="65" style="float: left;">
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with title_col:
+            # Keep title margin consistent with user interface
+            st.markdown("<h2 style='text-align: center; margin-top: 25px;'>Admin Dashboard</h2>", unsafe_allow_html=True)
+        
+        with info_col:
+            # Add padding to user info to match user interface
+            st.markdown(f"""
+            <div style="text-align: right; margin-top: 20px; padding-right: 15px;">
+                <div>Logged in: {st.session_state.username}</div>
+                <div>Current time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
+            </div>
+            """, unsafe_allow_html=True)
     
-    with col2:
-        st.markdown("<h2 style='text-align: center;'>Admin Dashboard</h2>", unsafe_allow_html=True)
+    # Keep minimal spacing after header content
+    st.markdown("<div style='height: 2px;'></div>", unsafe_allow_html=True)
     
-    with col3:
-        st.write(f"Logged in: {st.session_state.username}")
-        if st.button("👤 User", key="switch_to_user"):
+    # Create another row of columns for the buttons
+    _, _, button_space, user_col, logout_col = st.columns([1, 1, 1, 0.5, 0.5])
+    
+    with user_col:
+        if st.button("👤 User", key="admin_to_user_switch", use_container_width=True):
             st.session_state.is_admin = False
             st.rerun()
     
+    with logout_col:
+        if st.button("🚪 Logout", key="admin_logout_button", use_container_width=True):
+            st.session_state.logged_in = False
+            st.rerun()
+    
+    # Add a separator after the header
+    st.markdown("<hr style='margin: 10px 0; opacity: 0.3;'>", unsafe_allow_html=True)
+
+    # The rest of your admin interface remains unchanged
     # Admin content
     st.markdown("### System Status")
     
@@ -770,10 +862,14 @@ def admin_interface():
 
 def login_page():
     """Render the login page."""
+    # Current date and time display
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    st.info(f"Current Date and Time (UTC): {current_time}")
+    
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col1:
-        st.write("LOGO")
+        display_logo()
     
     with col2:
         st.markdown("<h2 style='text-align: center;'>Document Q&A System</h2>", unsafe_allow_html=True)
@@ -793,8 +889,10 @@ def login_page():
         
         if st.button("Login", type="primary", use_container_width=True):
             if username and password:
+                # Update these variables with the login values
                 st.session_state.username = username
                 st.session_state.is_admin = admin_check
+                st.session_state.logged_in = True  # <-- Set logged_in flag to True
                 st.rerun()
             else:
                 st.error("Please enter username and password")
@@ -805,8 +903,11 @@ def login_page():
 
 def main():
     """Main application function."""
+    # Apply custom CSS
+    set_custom_css()
+    
     # Check if user is logged in
-    if "username" not in st.session_state or st.session_state.username == "User":
+    if not st.session_state.logged_in:
         login_page()
     else:
         # Show admin or user interface based on role
