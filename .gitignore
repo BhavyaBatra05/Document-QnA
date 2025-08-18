@@ -3,3 +3,7 @@ venv/
 
 # Ignore environment variable files
 .env
+
+#Ignore pychache
+__pycache__/
+*pyc
