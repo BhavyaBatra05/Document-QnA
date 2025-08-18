@@ -388,12 +388,12 @@ if "current_doc_state" not in st.session_state:
 if "processed_documents" not in st.session_state:
     st.session_state.processed_documents = {}
 
-if "document_tracking" not in st.session_state:
-    st.session_state.document_tracking = {
-        "current_document_id": None,
-        "current_document_name": None,
-        "last_update": None
-    }
+# if "document_tracking" not in st.session_state:
+#     st.session_state.document_tracking = {
+#         "current_document_id": None,
+#         "current_document_name": None,
+#         "last_update": None
+#     }
 
 # Function to handle document processing
 def process_document(file_path):
