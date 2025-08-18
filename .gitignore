@@ -7,3 +7,4 @@ venv/
 #Ignore pychache
 __pycache__/
 *pyc
+.early.coverage

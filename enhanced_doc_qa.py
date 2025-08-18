@@ -71,30 +71,36 @@ def has_visual_metadata_pdf(file_path: str) -> bool:
     try:
         import fitz  # PyMuPDF
         doc = fitz.open(file_path)
-        total_images = 0
-        total_drawings = 0
-        total_complex_elements = 0
         total_pages = len(doc)
         pages_with_visuals = []
+        
         for page_num in range(total_pages):
             page = doc.load_page(page_num)
             images = page.get_images()
-            total_images += len(images)
-            drawings = page.get_drawings()
-            total_drawings += len(drawings)
-            # Visual detection per page:
-            if images or len(drawings) > 0:
-                pages_with_visuals.append(page_num)  # <-- COLLECT PAGE INDICES
+            
+            # Check for images in page
+            has_images = len(images) > 0
+            
+            # Alternative check using page dictionary
             text_dict = page.get_text("dict")
             blocks = text_dict.get("blocks", [])
-            short_text_blocks = sum(1 for block in blocks if block.get("type") == 0 and len(block.get("lines", [])) == 1)
-            if short_text_blocks > 10:
-                total_complex_elements += 1
+            
+            # Look for image blocks
+            image_blocks = [b for b in blocks if b.get("type") == 1]  # Type 1 is image
+            
+            if has_images or image_blocks:
+                pages_with_visuals.append(page_num)
+                
         doc.close()
         return {
-            "has_visuals": bool(pages_with_visuals),   # True if any page has visuals
-            "visual_pages": pages_with_visuals          # List of page indices with visuals
+            "has_visuals": bool(pages_with_visuals),
+            "visual_pages": pages_with_visuals
         }
+    except ImportError:
+        return {"has_visuals": False, "visual_pages": []}
+    except Exception as e:
+        print(f"Error detecting visuals: {e}")
+        return {"has_visuals": False, "visual_pages": []}
         # has_actual_images = total_images > 0
         # has_significant_drawings = total_drawings > (total_pages * 25)
         # has_complex_layouts = total_complex_elements > 3
@@ -106,10 +112,6 @@ def has_visual_metadata_pdf(file_path: str) -> bool:
         #     return True
         # else:
         #     return False
-    except ImportError:
-        return False
-    except Exception as e:
-        return False
 
 def has_visual_metadata_docx(file_path: str) -> bool:
     try:
@@ -278,16 +280,20 @@ class BatchVLMProcessor:
         return results
     def process_pdf_parallel(self, file_path: Path, visual_pages: List[int] = None) -> Dict[str, Any]:
         try:
-            from pdf2image import convert_from_path
             import torch
+            import fitz  # PyMuPDF
+            import numpy as np
+            from PIL import Image
 
-            # Get total pages
-            total_pages = get_pdf_page_count(file_path)
+            # Get total pages using PyMuPDF instead of pdf2image
+            doc = fitz.open(str(file_path))
+            total_pages = len(doc)
             print(f"PDF has {total_pages} pages")
 
             # First get standard text extraction for all pages
             text_content = {}
             try:
+                # Already using PyPDF for text extraction, keep this part
                 from pypdf import PdfReader
                 reader = PdfReader(str(file_path))
                 for i, page in enumerate(reader.pages):
@@ -328,34 +334,23 @@ class BatchVLMProcessor:
                 if not batch_indices:
                     continue
 
-                # Convert 0-indexed to 1-indexed for pdf2image
-                first_page = min(batch_indices) + 1
-                last_page = max(batch_indices) + 1
-
                 try:
-                    # Convert only the needed pages to images
-                    pages = convert_from_path(
-                        str(file_path),
-                        dpi=150,
-                        first_page=first_page,
-                        last_page=last_page
-                    )
-
-                    print(f"Converted pages {first_page} to {last_page}, got {len(pages)} images")
-
-                    # Map pages to their indices
-                    page_images = {}
-                    for i, page_idx in enumerate(range(first_page - 1, last_page)):
-                        if i < len(pages) and page_idx in batch_indices:
-                            page_images[page_idx] = pages[i]
-
                     # Create batches for VLM processing
                     page_batches = []
                     current_batch = []
 
+                    # Instead of pdf2image, use PyMuPDF to get page images
                     for page_idx in batch_indices:
-                        if page_idx in page_images:
-                            current_batch.append((page_idx, page_images[page_idx]))
+                        if 0 <= page_idx < total_pages:  # Ensure page index is valid
+                            page = doc.load_page(page_idx)
+                            # Render page to an image at a reasonable resolution
+                            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x zoom for better resolution
+
+                            # Convert pixmap to PIL Image
+                            img_data = pix.samples
+                            img = Image.frombytes("RGB", [pix.width, pix.height], img_data)
+
+                            current_batch.append((page_idx, img))
                             if len(current_batch) >= self.batch_size:
                                 page_batches.append(current_batch)
                                 current_batch = []
@@ -386,12 +381,14 @@ class BatchVLMProcessor:
                                     text_content[page_idx] = f"--- PAGE {page_idx+1} (VLM FAILED) ---\n[VLM processing failed]\n\n"
 
                     # Clean up
-                    del pages, page_images
                     gc.collect()
 
                 except Exception as chunk_error:
                     print(f"Exception processing visual pages {batch_indices}: {chunk_error}")
                     # Keep text extraction for these pages
+
+            # Close the document
+            doc.close()
 
             # Combine all text in page order
             extracted_text = ""
@@ -401,7 +398,16 @@ class BatchVLMProcessor:
             print(f"process_pdf_parallel: final extraction has {len(extracted_text)} chars")
 
             if not extracted_text.strip() or len(extracted_text.strip()) < 50:
-                return SmartDocumentProcessor._extract_pdf_ocr(self, file_path)
+                # Modified fallback without OCR
+                return {
+                    "text": "Text extraction failed. Please try another file format.",
+                    "extraction_method": "failed",
+                    "success": False,
+                    "word_count": 0,
+                    "pages": total_pages,
+                    "pages_processed": 0,
+                    "processing_time": 0,
+                }
 
             return {
                 "text": extracted_text,
@@ -578,26 +584,40 @@ class SmartDocumentProcessor:
 
     def _extract_pdf_ocr(self, file_path: Path) -> Dict[str, Any]:
         try:
-            from pdf2image import convert_from_path
-            import pytesseract
+            import fitz  # PyMuPDF
         except ImportError:
-            return {"success": False, "error": "OCR dependencies missing (pdf2image, pytesseract)"}
+            return {"success": False, "error": "PyMuPDF (fitz) not installed"}
+    
         try:
-            with self.temporary_directory() as temp_dir:
-                pages = convert_from_path(str(file_path), dpi=200)
-                extracted_text = ""
-                for i, page in enumerate(pages):
-                    page_text = pytesseract.image_to_string(page, lang='eng')
-                    extracted_text += f"--- PAGE {i+1} (OCR) ---\n{page_text}\n\n"
-                return {
-                    "text": extracted_text,
-                    "extraction_method": "ocr",
-                    "success": True,
-                    "word_count": len(extracted_text.split()),
-                    "pages": len(pages),
-                }
+            doc = fitz.open(str(file_path))
+            extracted_text = ""
+
+            for i in range(len(doc)):
+                page = doc.load_page(i)
+                # Try different text extraction methods if one fails
+                try:
+                    # Try normal text extraction first
+                    page_text = page.get_text()
+                    if not page_text.strip():
+                        # If no text found, try extracting as dict which sometimes gets more text
+                        text_dict = page.get_text("dict")
+                        blocks = text_dict.get("blocks", [])
+                        page_text = "\n".join([block.get("text", "") for block in blocks if "text" in block])
+                except:
+                    page_text = ""
+
+                extracted_text += f"--- PAGE {i+1} (PyMuPDF) ---\n{page_text}\n\n"
+
+            doc.close()
+            return {
+                "text": extracted_text,
+                "extraction_method": "pymupdf",
+                "success": True,
+                "word_count": len(extracted_text.split()),
+                "pages": len(doc),
+            }
         except Exception as e:
-            return {"success": False, "error": f"OCR extraction failed: {str(e)}"}
+            return {"success": False, "error": f"PyMuPDF extraction failed: {str(e)}"}
 
     def _extract_docx_standard(self, file_path: Path) -> Dict[str, Any]:
         try:
@@ -703,28 +723,51 @@ class InMemoryVectorStore:
         self.chunks = None
 
     def create_vectorstore(self, text: str, chunk_size: int = 1000,
-                          chunk_overlap: int = 100) -> Dict[str, Any]:
+                      chunk_overlap: int = 200) -> Dict[str, Any]:
         """Create in-memory vector store with dynamic parameters."""
         try:
             from langchain.text_splitter import RecursiveCharacterTextSplitter
-            from langchain.vectorstores import FAISS  # Changed from Chroma to FAISS
+            from langchain.vectorstores import FAISS
             from langchain_huggingface import HuggingFaceEmbeddings
         except ImportError as e:
             return {"success": False, "error": f"Vector dependencies missing: {e}"}
 
         try:
-            # Dynamic chunk size based on document length
+            # Dynamic chunk size based on document length, but with higher overlap
             doc_length = len(text)
-            chunk_size = 500
-            chunk_overlap = 100
+
+            # Increase overlap to 50% of chunk size for better continuity
             if doc_length < 2000:
                 chunk_size = max(50, doc_length // 2)
-                chunk_overlap = max(10, chunk_size // 10)
+                chunk_overlap = max(25, chunk_size // 2)  # 50% overlap
             elif doc_length > 50000:
                 chunk_size = 1500
-                chunk_overlap = 200
+                chunk_overlap = 750  # 50% overlap
+            else:
+                chunk_size = 800  # Smaller chunks
+                chunk_overlap = 400  # 50% overlap
 
             logger.info(f"Using chunk_size={chunk_size}, chunk_overlap={chunk_overlap}")
+        # try:
+        #     from langchain.text_splitter import RecursiveCharacterTextSplitter
+        #     from langchain.vectorstores import FAISS  # Changed from Chroma to FAISS
+        #     from langchain_huggingface import HuggingFaceEmbeddings
+        # except ImportError as e:
+        #     return {"success": False, "error": f"Vector dependencies missing: {e}"}
+
+        # try:
+        #     # Dynamic chunk size based on document length
+        #     doc_length = len(text)
+        #     chunk_size = 500
+        #     chunk_overlap = 100
+        #     if doc_length < 2000:
+        #         chunk_size = max(50, doc_length // 2)
+        #         chunk_overlap = max(10, chunk_size // 10)
+        #     elif doc_length > 50000:
+        #         chunk_size = 1500
+        #         chunk_overlap = 200
+
+        #     logger.info(f"Using chunk_size={chunk_size}, chunk_overlap={chunk_overlap}")
             def _clean_text_for_split(t: str) -> str:
                 import re
                 t = t.replace('|', '\t')
@@ -776,7 +819,7 @@ class InMemoryVectorStore:
             logger.error(f"Vector store creation failed: {e}")
             return {"success": False, "error": str(e)}
 
-    def retrieve_chunks(self, query: str, k: int = 5) -> List[str]:
+    def retrieve_chunks(self, query: str, k: int = 8) -> List[str]:
         """Retrieve relevant chunks for the query."""
         if not self.vectorstore:
             return []
@@ -784,8 +827,11 @@ class InMemoryVectorStore:
         try:
             # FAISS has a similar retriever interface to Chroma
             retriever = self.vectorstore.as_retriever(
-                search_type='similarity',
-                search_kwargs={"k": min(k, len(self.chunks) if self.chunks else k)}
+                search_type='mmr', #Maximum Marginal Relevance
+                search_kwargs={"k": min(k, len(self.chunks) if self.chunks else k),
+                "fetch_k": min(k*3, len(self.chunks) if self.chunks else k*3),
+                "lambda_mult": 0.7  # Balance between relevance and diversity
+                }
             )
 
             docs = retriever.get_relevant_documents(query)
@@ -831,7 +877,9 @@ CRITICAL RULES:
 4. Never add information from your general knowledge
 5. If uncertain about any part of your answer, state your uncertainty clearly
 6. Provide specific quotes when relevant
-Don't write Sources like Sources 1, Sources 2, etc. please
+7. Present information in a well-structured format.
+8. For schedules, timelines, or lists, ALWAYS check if there are any missing weeks, days, or entries.
+Don't write the word "Sources" like "Sources 1", "Sources 2", etc. please in your response.
 
 
 SOURCES:
