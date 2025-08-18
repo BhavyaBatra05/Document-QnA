@@ -9,8 +9,10 @@ langchain-huggingface>=0.1.0
 langchain-text-splitters>=0.3.0
 
 # Vector Store and Embeddings
-chromadb>=1.0.0
+# chromadb>=1.0.0
 sentence-transformers>=3.0.0
+
+pip install faiss-cpu
 
 # Enhanced Document Processing - Core Libraries
 pypdf>=5.0.0
@@ -45,7 +47,6 @@ scipy>=1.10.0
 scikit-learn>=1.2.0
 requests>=2.31.0
 datasets>=2.18.0
-
 # System Requirements
 # For Ubuntu/Debian systems:
 # sudo apt-get install tesseract-ocr
