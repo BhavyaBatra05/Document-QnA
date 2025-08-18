@@ -707,7 +707,7 @@ class InMemoryVectorStore:
         """Create in-memory vector store with dynamic parameters."""
         try:
             from langchain.text_splitter import RecursiveCharacterTextSplitter
-            from langchain.vectorstores import Chroma
+            from langchain.vectorstores import FAISS  # Changed from Chroma to FAISS
             from langchain_huggingface import HuggingFaceEmbeddings
         except ImportError as e:
             return {"success": False, "error": f"Vector dependencies missing: {e}"}
@@ -748,27 +748,22 @@ class InMemoryVectorStore:
             )
 
             self.chunks = splitter.split_text(text)
-            # assert self.chunks and len(self.chunks) > 0, "No chunks found to embed!"
 
             logger.info(f"Text splitter produced {len(self.chunks)} chunks.")
             if not self.chunks or len(self.chunks) == 0:
                 logger.error("No text chunks to create vector store! Extraction may have failed or document is empty.")
                 return {"success": False, "error": "No data found for embedding."}
 
-
             # Create embeddings and in-memory vectorstore
             embeddings = HuggingFaceEmbeddings(
                 model_name="sentence-transformers/all-MiniLM-L6-v2"
             )
 
-            # Important: No persist_directory for in-memory only
-            self.vectorstore = Chroma(
-                embedding_function=embeddings,
-                collection_name=f"session_{self.session_id}"
+            # Create FAISS index from documents
+            self.vectorstore = FAISS.from_texts(
+                self.chunks, 
+                embeddings
             )
-
-            # Add chunks
-            self.vectorstore.add_texts(self.chunks)
 
             return {
                 "success": True,
@@ -787,6 +782,7 @@ class InMemoryVectorStore:
             return []
 
         try:
+            # FAISS has a similar retriever interface to Chroma
             retriever = self.vectorstore.as_retriever(
                 search_type='similarity',
                 search_kwargs={"k": min(k, len(self.chunks) if self.chunks else k)}
@@ -831,10 +827,11 @@ class HallucinationResistantAnswerer:
 CRITICAL RULES:
 1. Use ONLY information from the provided sources below
 2. If the sources don't contain enough information, explicitly state: "The provided sources don't contain sufficient information to answer this question"
-
+3. Give best answer possible
 4. Never add information from your general knowledge
 5. If uncertain about any part of your answer, state your uncertainty clearly
 6. Provide specific quotes when relevant
+Don't write Sources like Sources 1, Sources 2, etc. please
 
 
 SOURCES:
