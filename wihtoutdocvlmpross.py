@@ -12,7 +12,6 @@ Always tries to report page count for analytics for all file types.
 import os
 import tempfile
 import shutil
-import subprocess
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 import logging
@@ -24,7 +23,6 @@ import gc
 import time
 from dotenv import load_dotenv
 from typing import TypedDict
-import re
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -47,29 +45,7 @@ class QAState(TypedDict):
     word_count: int
     chunk_count: int
     next_action: str
-    original_file_name: str
 
-def convert_docx_to_pdf_cross_platform(docx_path, pdf_path):
-    try:
-        # Try docx2pdf (works only on Windows/Mac with Word)
-        from docx2pdf import convert
-        convert(str(docx_path), str(pdf_path))
-        return True, None
-    except Exception as e:
-        # If on Linux (Streamlit Cloud), try libreoffice
-        try:
-            command = [
-                "libreoffice",
-                "--headless",
-                "--convert-to", "pdf",
-                "--outdir", str(pdf_path.parent),
-                str(docx_path)
-            ]
-            subprocess.run(command, check=True)
-            # The converted PDF will be named as docx_path.stem + ".pdf" in pdf_path.parent
-            return True, None
-        except Exception as e2:
-            return False, f"Failed DOCX-to-PDF conversion: {e} | {e2}"
 
 # ====== UTILITY FUNCS FOR PAGE COUNT ======
 def get_pdf_page_count(file_path: Path) -> int:
@@ -90,16 +66,6 @@ def get_pdf_page_count(file_path: Path) -> int:
 def get_docx_page_estimate(text: str) -> int:
     return max(1, len(text) // 1800)
 
-
-def increment_page_numbers(text):
-    """
-    Replace all 'PAGE X' (where X is a number) with 'PAGE X+1' in the text.
-    Example: 'This is on PAGE 0.' -> 'This is on PAGE 1.'
-    """
-    def repl(match):
-        num = int(match.group(1))
-        return f"PAGE {num+1}"
-    return re.sub(r'PAGE (\d+)', repl, text)
 # ====== VISUAL CONTENT DETECTION ======
 def has_visual_metadata_pdf(file_path: str) -> bool:
     try:
@@ -498,33 +464,11 @@ class SmartDocumentProcessor:
             visual_analysis = has_visual_content_comprehensive(str(file_path))
             result["has_visual_content"] = visual_analysis["has_visuals"]
             result["visual_detection"] = visual_analysis
-    
-            # ---- DOCX with Visuals: Convert to PDF, then process with VLM ----
-            if file_ext == ".docx" and visual_analysis["has_visuals"] and self.batch_processor:
-                with self.temporary_directory() as temp_dir:
-                    pdf_path = Path(temp_dir) / (file_path.stem + ".pdf")
-                    success, error = convert_docx_to_pdf_cross_platform(file_path, pdf_path)
-                    if not success:
-                        result["error"] = error
-                        return result
-    
-                    # Now treat the PDF as a visual document
-                    visual_info = has_visual_metadata_pdf(str(pdf_path))
-                    visual_pages = visual_info.get("visual_pages", [])
-                    out = self.batch_processor.process_pdf_parallel(pdf_path, visual_pages=visual_pages)
-                    out["extraction_method"] = "docx2pdf_vlm"
-                    result.update(out)
-    
-            # ---- PDF with Visuals: Original VLM logic ----
-            elif file_ext == ".pdf" and visual_analysis["has_visuals"] and self.batch_processor:
+            if visual_analysis["has_visuals"] and self.batch_processor:
                 extraction = self._extract_with_batch_vlm(file_path)
-                result.update(extraction)
-    
-            # ---- All others: Standard extraction ----
             else:
                 extraction = self._extract_standard(file_path)
-                result.update(extraction)
-    
+            result.update(extraction)
             print("Extracted text from extractor:", result.get("text", "")[:500])
             if "pages" not in result or not result["pages"]:
                 if file_ext == ".pdf":
@@ -537,7 +481,7 @@ class SmartDocumentProcessor:
                 else:
                     result["pages"] = 1
             result["processing_time"] = round(time.time() - t0, 2)
-            result["success"] = result.get("success", False)
+            result["success"] = extraction.get("success", False)
         except Exception as e:
             result["error"] = str(e)
         return result
@@ -921,7 +865,7 @@ class HallucinationResistantAnswerer:
             }
 
         # Create numbered context
-        context = "\n\n".join(chunk for chunk in context_chunks)
+        context = "\n\n".join(f"[Source {i+1}]: {chunk}" for i, chunk in enumerate(context_chunks))
 
         # Advanced anti-hallucination prompt
         enhanced_prompt = f"""You are a precise document analysis assistant. Your task is to answer questions using ONLY the provided context.
@@ -1154,8 +1098,6 @@ def query_answerer(state: QAState) -> QAState:
 
         # Normal path continues here
         chunks = state["vectorstore"].retrieve_chunks(state["query"], k=6)
-        chunks = [increment_page_numbers(chunk) for chunk in chunks]
-        
         state["retrieved_chunks"] = chunks
 
         answerer = HallucinationResistantAnswerer(llm=llm)
@@ -1268,8 +1210,7 @@ def run_document_qa_system(file_path: str, llm=None, vlm_processor=None, vlm_mod
         extraction_method="",
         word_count=0,
         chunk_count=0,
-        next_action="continue",
-        original_file_name=os.path.basename(file_path)
+        next_action="continue"
     )
 
     # Create and run workflow

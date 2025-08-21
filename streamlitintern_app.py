@@ -18,6 +18,9 @@ from enhanced_doc_qa import (
     run_document_qa_system,
     QAState
 )
+
+from demo_documents import DEMO_DOCUMENTS, get_demo_file_path, get_demo_document_info, check_demo_files_exist
+
 from langgraph.graph import StateGraph, END
 
 # Load environment variables
@@ -140,11 +143,18 @@ def display_logo():
     """Display the logo image."""
     # Adjusted to keep logo properly positioned within the frame
     logo_html = """
-    <div style="display: flex; justify-content: flex-start; align-items: center; padding-left: 15px; padding-top: 10px;">
-        <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT7zBX4VmSnYfD1Ismi7kk8MCDAGd-tPJrQwQ&s" alt="Logo" width="80" height="80">
-    </div>
-    """
+            <div style="display: flex; align-items: center; height: 80px; padding-left: 20px; margin-top: -65px;">
+           
+            </div>
+            """
     st.markdown(logo_html, unsafe_allow_html=True)
+            #<img src="C:\\Users\\ASUS\\Downloads\\Docsqnaai\\Document-QnA\\logo.png" alt="Logo" width="65" height="65" style="float: left;">
+    try:
+        st.image("logo.png", width=65)
+    except FileNotFoundError:
+        st.write("Logo")
+    st.markdown("</div>", unsafe_allow_html=True)
+        #https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT7zBX4VmSnYfD1Ismi7kk8MCDAGd-tPJrQwQ&s
 
 def start_new_chat():
     """Start a new chat session."""
@@ -184,6 +194,7 @@ def load_chat_session(session_id):
             st.session_state.chat_history = session["messages"].copy()
             return True
     return False
+
 
 # =========================
 # ----- STYLING ----------
@@ -388,6 +399,9 @@ if "current_doc_state" not in st.session_state:
 if "processed_documents" not in st.session_state:
     st.session_state.processed_documents = {}
 
+if "demo_mode" not in st.session_state:
+    st.session_state.demo_mode = False
+
 # if "document_tracking" not in st.session_state:
 #     st.session_state.document_tracking = {
 #         "current_document_id": None,
@@ -396,7 +410,7 @@ if "processed_documents" not in st.session_state:
 #     }
 
 # Function to handle document processing
-def process_document(file_path):
+def process_document(file_path,original_file_name=None):
     """Process a document using the backend system."""
     try:
         # Initialize document processor
@@ -424,6 +438,7 @@ def process_document(file_path):
         # Create QA state
         qa_state = {
             "file_path": file_path,
+            "original_file_name": original_file_name if original_file_name else os.path.basename(file_path),
             "text": extraction_result["text"],
             "chunks": vector_store.chunks if vector_store.chunks else [],
             "vectorstore": vector_store,
@@ -435,7 +450,6 @@ def process_document(file_path):
             "chunk_count": vs_result["chunk_count"],
             "next_action": "continue"
         }
-        
         return qa_state, None
     except Exception as e:
         return None, str(e)
@@ -501,6 +515,43 @@ def handle_message_submit():
         
         # Clear the input
         st.session_state.message_input = ""
+        
+# Add these functions after handle_message_submit()
+
+def populate_demo_files():
+    """Populate the file table with demo documents when demo mode is active."""
+    demo_files = []
+    for doc_key, doc_info in DEMO_DOCUMENTS.items():
+        demo_files.append({
+            "Date": "19-8-25",
+            "File Name": doc_info["filename"],
+            "IsActive": False,
+            "Ingested": True,
+            "demo_key": doc_key,
+            "display_name": doc_info["display_name"],
+            "file_path": doc_info["file_path"]
+        })
+    return demo_files
+
+def process_demo_document(doc_key):
+    """Process a demo document using actual files."""
+    try:
+        # Get the actual file path
+        file_path = get_demo_file_path(doc_key)
+        
+        # Process using your existing pipeline
+        qa_state, error = process_document(file_path)
+        
+        if qa_state:
+            return qa_state, None
+        else:
+            return None, error
+            
+    except FileNotFoundError as e:
+        return None, f"Demo file not found: {str(e)}"
+    except Exception as e:
+        return None, str(e)
+
 
 # =========================
 # ----- USER INTERFACE ----
@@ -519,19 +570,23 @@ def user_interface():
         with logo_col:
             # Keep the same logo positioning
             st.markdown("""
-            <div style="display: flex; align-items: center; height: 80px; padding-left: 20px; padding-top: 15px;">
-                <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT7zBX4VmSnYfD1Ismi7kk8MCDAGd-tPJrQwQ&s" alt="Logo" width="65" height="65" style="float: left;">
-            </div>
-            """, unsafe_allow_html=True)
-        
+    <div style='display: flex; align-items: center; height: 80px; margin-top: -45px;'>
+    """, unsafe_allow_html=True)
+            #<img src="C:\\Users\\ASUS\\Downloads\\Docsqnaai\\Document-QnA\\logo.png" alt="Logo" width="65" height="65" style="float: left;">
+            try:
+                st.image("logo.png", width=65)
+            except FileNotFoundError:
+                st.write("Logo")
+            st.markdown("</div>", unsafe_allow_html=True)
+        #https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT7zBX4VmSnYfD1Ismi7kk8MCDAGd-tPJrQwQ&s
         with title_col:
             # Keep title margin the same
-            st.markdown("<h2 style='text-align: center; margin-top: 25px;'>Document Q&A System</h2>", unsafe_allow_html=True)
+            st.markdown("<h2 style='text-align: center; margin-top: 35px;'>Document Q&A System</h2>", unsafe_allow_html=True)
         
         with info_col:
             # Keep user info the same
             st.markdown(f"""
-            <div style="text-align: right; margin-top: 20px; padding-right: 15px;">
+            <div style="text-align: right; margin-top: 95px; padding-right: 15px;">
                 <div>Logged in: {st.session_state.username}</div>
                 <div>Current time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
             </div>
@@ -562,16 +617,31 @@ def user_interface():
     
     with chat_col:
         # Display current document info
+                # Display current document info
         if "current_doc_state" in st.session_state and st.session_state.current_doc_state:
             file_path = st.session_state.current_doc_state.get("file_path", "Unknown")
             file_name = Path(file_path).name if file_path != "Unknown" else "Unknown"
             word_count = st.session_state.current_doc_state.get("word_count", 0)
-            st.info(f"📄 Currently using: {file_name} ({word_count} words)")
+            st.info(f"📄 Currently using: {st.session_state.current_doc_state['original_file_name']} ({word_count} words)")
+            # Show sample queries for demo documents
+            if st.session_state.demo_mode:
+                for doc_key, doc_info in DEMO_DOCUMENTS.items():
+                    if doc_info["filename"] == file_name:
+                        st.markdown("**Try these sample questions:**")
+                        cols = st.columns(2)
+                        for i, query in enumerate(doc_info["sample_queries"][:4]):
+                            with cols[i % 2]:
+                                if st.button(f"❓ {query[:35]}...", key=f"sample_{i}"):
+                                    st.session_state.message_input = query
+                                    handle_message_submit()
+                                    st.rerun()
+                        break
         else:
             st.warning("Please upload a document in Admin section to start")
+        # Display demo mode info if applicable
         
         # New chat button
-        if st.button("🆕 New Chat"):
+        if st.button("New Chat"):
             start_new_chat()
             st.rerun()
         
@@ -670,21 +740,26 @@ def admin_interface():
         logo_col, title_col, info_col = st.columns([2, 3, 2])
         
         with logo_col:
-            # Adjust logo positioning to be more to the left with padding
+            # Keep the same logo positioning
             st.markdown("""
-            <div style="display: flex; align-items: center; height: 80px; padding-left: 20px; padding-top: 15px;">
-                <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT7zBX4VmSnYfD1Ismi7kk8MCDAGd-tPJrQwQ&s" alt="Logo" width="65" height="65" style="float: left;">
-            </div>
-            """, unsafe_allow_html=True)
+    <div style='display: flex; align-items: center; height: 80px; margin-top: -45px;'>
+    """, unsafe_allow_html=True)
+            #<img src="C:\\Users\\ASUS\\Downloads\\Docsqnaai\\Document-QnA\\logo.png" alt="Logo" width="65" height="65" style="float: left;">
+            try:
+                st.image("logo.png", width=65)
+            except FileNotFoundError:
+                st.write("Logo")
+            st.markdown("</div>", unsafe_allow_html=True)
+        #https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT7zBX4VmSnYfD1Ismi7kk8MCDAGd-tPJrQwQ&s
         
         with title_col:
             # Keep title margin consistent with user interface
-            st.markdown("<h2 style='text-align: center; margin-top: 25px;'>Admin Dashboard</h2>", unsafe_allow_html=True)
+            st.markdown("<h2 style='text-align: center; margin-top: 35px;'>Admin Dashboard</h2>", unsafe_allow_html=True)
         
         with info_col:
             # Add padding to user info to match user interface
             st.markdown(f"""
-            <div style="text-align: right; margin-top: 20px; padding-right: 15px;">
+            <div style="text-align: right; margin-top: 95px; padding-right: 15px;">
                 <div>Logged in: {st.session_state.username}</div>
                 <div>Current time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
             </div>
@@ -714,59 +789,128 @@ def admin_interface():
     st.markdown("### System Status")
     
     # Browse file button
-    col1, col2, col3 = st.columns([1, 1, 1])
+        # Browse file section with demo toggle
+    st.markdown("### Browse File")
+
+    # Demo mode toggle
+    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        uploaded_file = st.file_uploader("Browse File", type=SUPPORTED_FORMATS)
-        if uploaded_file:
-            # First add the file to the table with processing status
-            if uploaded_file.name not in st.session_state.uploaded_files:
-                st.session_state.uploaded_files.append(uploaded_file.name)
-                
-                # Update admin table - file is added but not yet processed
-                current_date = get_formatted_date()
-                st.session_state.admin_files_data["Date"].append(current_date)
-                st.session_state.admin_files_data["File Name"].append(uploaded_file.name)
-                st.session_state.admin_files_data["IsActive"].append("✗")
-                st.session_state.admin_files_data["Ingested"].append("✗")
-                
-                # Display a processing message
-                with st.spinner(f"Adding {uploaded_file.name} to the table..."):
-                    time.sleep(0.5)  # Short delay to show the message
-                st.rerun()
+        demo_mode = st.toggle("Demo Mode", key="demo_toggle", value=st.session_state.demo_mode)
+        st.session_state.demo_mode = demo_mode
+
+    if demo_mode:
+        st.info("**Demo Mode Active** - Using demo files with VLM processing")
+        
+        # Check if demo files exist
+        file_status = check_demo_files_exist()
+        missing_files = [key for key, exists in file_status.items() if not exists]
+        
+        if missing_files:
+            st.error("❌ Demo files missing!")
+            st.stop()
+        
+        # Add processing flag to session state
+        if "demo_processing_done" not in st.session_state:
+            st.session_state.demo_processing_done = False
+        
+        # Only process if not done yet
+        if not st.session_state.demo_processing_done:
+            # Set flag FIRST to prevent reprocessing
+            st.session_state.demo_processing_done = True
             
-            # Now process the file if it hasn't been processed yet
-            if "processed_documents" not in st.session_state:
-                st.session_state.processed_documents = {}
+            # Clear existing data
+            st.session_state.admin_files_data = {
+                "Date": [], "File Name": [], "IsActive": [], "Ingested": []
+            }
+            st.session_state.processed_documents = {}
+            
+            # Add and process demo files
+            demo_files = populate_demo_files()
+            
+            for i, demo_file in enumerate(demo_files):
+                st.session_state.admin_files_data["Date"].append(demo_file["Date"])
+                st.session_state.admin_files_data["File Name"].append(demo_file["File Name"])
+                st.session_state.admin_files_data["IsActive"].append("✗")
                 
-            if uploaded_file.name not in st.session_state.processed_documents:
-                # Save the uploaded file to a temporary location
-                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
-                    tmp_file.write(uploaded_file.getvalue())
-                    file_path = tmp_file.name
-                
-                with st.spinner(f"Processing {uploaded_file.name}... This may take a while"):
-                    # Process the document
-                    qa_state, error = process_document(file_path)
+                # Process with spinner
+                with st.spinner(f"Processing {demo_file['File Name']}..."):
+                    qa_state, error = process_demo_document(demo_file["demo_key"])
                     
                     if qa_state:
-                        # Store the processed document
-                        st.session_state.processed_documents[uploaded_file.name] = qa_state
-                        
-                        # Update the file's ingested status to ticked
-                        file_index = st.session_state.admin_files_data["File Name"].index(uploaded_file.name)
-                        st.session_state.admin_files_data["Ingested"][file_index] = "✓"
-                        
-                        # Set as current document
-                        st.session_state.current_doc_state = qa_state
-                        
-                        # Update IsActive status - make this one active, others inactive
-                        for i in range(len(st.session_state.admin_files_data["IsActive"])):
-                            st.session_state.admin_files_data["IsActive"][i] = "✓" if i == file_index else "✗"
-                        
-                        st.success(f"Document processed successfully! Extracted {qa_state['word_count']} words and created {qa_state['chunk_count']} chunks.")
-                        st.rerun()
+                        st.session_state.processed_documents[demo_file["File Name"]] = qa_state
+                        st.session_state.admin_files_data["Ingested"].append("✓")
+                        st.success(f"✅ {demo_file['File Name']} processed!")
                     else:
-                        st.error(f"Failed to process document: {error}")
+                        st.session_state.admin_files_data["Ingested"].append("✗")
+                        st.error(f"❌ Failed: {demo_file['File Name']}")
+            
+            # NO ST.RERUN() HERE!
+            st.success("🎉 All demo documents processed successfully!")
+        
+        else:
+            # Already processed, just show status
+            processed_count = len([f for f in st.session_state.admin_files_data.get("Ingested", []) if f == "✓"])
+            st.success(f"✅ Demo mode ready! ({processed_count} documents already processed)")
+
+    else:
+        if "demo_processing_done" in st.session_state:
+            st.session_state.demo_processing_done = False
+        # Your existing regular file upload code stays exactly the same
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            uploaded_file = st.file_uploader("Browse File", type=SUPPORTED_FORMATS)
+            
+            if uploaded_file:
+                # Your existing file upload logic continues here...
+                if uploaded_file.name not in st.session_state.uploaded_files:
+                    st.session_state.uploaded_files.append(uploaded_file.name)
+                    
+                    # Update admin table - file is added but not yet processed
+                    current_date = get_formatted_date()
+                    st.session_state.admin_files_data["Date"].append(current_date)
+                    st.session_state.admin_files_data["File Name"].append(uploaded_file.name)
+                    st.session_state.admin_files_data["IsActive"].append("✗")
+                    st.session_state.admin_files_data["Ingested"].append("✗")
+                    
+                    # Display a processing message
+                    with st.spinner(f"Adding {uploaded_file.name} to the table..."):
+                        time.sleep(0.5)
+                    st.rerun()
+                
+                # Now process the file if it hasn't been processed yet
+                if "processed_documents" not in st.session_state:
+                    st.session_state.processed_documents = {}
+                    
+                if uploaded_file.name not in st.session_state.processed_documents:
+                    # Save the uploaded file to a temporary location
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
+                        tmp_file.write(uploaded_file.getvalue())
+                        file_path = tmp_file.name
+                    
+                    with st.spinner(f"Processing {uploaded_file.name} and other files... This may take a while"):
+                        # Process the document
+                        qa_state, error = process_document(file_path,original_file_name=uploaded_file.name)
+                        
+                        if qa_state:
+                            # Store the processed document
+                            st.session_state.processed_documents[uploaded_file.name] = qa_state
+                            
+                            # Update the file's ingested status to ticked
+                            file_index = st.session_state.admin_files_data["File Name"].index(uploaded_file.name)
+                            st.session_state.admin_files_data["Ingested"][file_index] = "✓"
+                            
+                            # Set as current document
+                            st.session_state.current_doc_state = qa_state
+                            
+                            # Update IsActive status - make this one active, others inactive
+                            for i in range(len(st.session_state.admin_files_data["IsActive"])):
+                                st.session_state.admin_files_data["IsActive"][i] = "✓" if i == file_index else "✗"
+                            
+                            st.success(f"Document processed successfully! Extracted {qa_state['word_count']} words and created {qa_state['chunk_count']} chunks.")
+                            st.rerun()
+                        else:
+                            st.error(f"Failed to process document: {error}")
+
     
     # User files table
     st.markdown("### User Specific Uploaded Files")
@@ -857,7 +1001,8 @@ def admin_interface():
     if "current_doc_state" in st.session_state and st.session_state.current_doc_state:
         file_path = st.session_state.current_doc_state.get("file_path", "Unknown")
         file_name = Path(file_path).name if file_path != "Unknown" else "Unknown"
-        st.success(f"Current active file for Q&A: {file_name}")
+        original_file_name = st.session_state.current_doc_state.get("original_file_name", "Unknown")
+        st.success(f"Current active file for Q&A: {original_file_name}")
     
     # Footer
     st.markdown("---")
@@ -879,7 +1024,7 @@ def login_page():
         display_logo()
     
     with col2:
-        st.markdown("<h2 style='text-align: center;'>Document Q&A System</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center; margin-top: 25px;'>Document Q&A System</h2>", unsafe_allow_html=True)
     
     with col3:
         st.write("")
