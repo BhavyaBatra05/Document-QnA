@@ -3,32 +3,32 @@ from typing import Dict, Any
 
 # Demo documents configuration with relative paths
 DEMO_DOCUMENTS = {
-    "java_intro": {
-        "filename": "Java's Role in AIML.docx",
-        "display_name": "Java in AI/ML - Introduction (DOCX)",
-        "file_path": Path("./demo_files/Java's Role in AIML.docx"),
-        "file_type": "docx",
-        "has_visuals": True,
-        "sample_queries": [
-            "What is Java's role in AI/ML?",
-            "What does the table say?",
-            "List some Java's applications.",
-        ]
-    },
+    # "java_intro": {
+    #     "filename": "Java's Role in AIML.docx",
+    #     "display_name": "Java in AI/ML - Introduction (DOCX)",
+    #     "file_path": Path("./demo_files/Java's Role in AIML.docx"),
+    #     "file_type": "docx",
+    #     "has_visuals": True,
+    #     "sample_queries": [
+    #         "What is Java's role in AI/ML?",
+    #         "What does the table say?",
+    #         "List some Java's applications.",
+    #     ]
+    # },
     
-    "java_comprehensive": {
-        "filename": "Java's Role in AIML.pdf",
-        "display_name": "Java in AI/ML - Complete Guide (PDF)",
-        "file_path": Path("./demo_files/Java's Role in AIML.pdf"),
-        "file_type": "pdf",
-        "has_visuals": True,
-        "sample_queries": [
-            "What are the top Java ML libraries?",
-            "Give me the complete schedule week-wise.",
-            "What does the visual say?",
-            "List the machine learning frameworks for Java"
-        ]
-    },
+    # "java_comprehensive": {
+    #     "filename": "Java's Role in AIML.pdf",
+    #     "display_name": "Java in AI/ML - Complete Guide (PDF)",
+    #     "file_path": Path("./demo_files/Java's Role in AIML.pdf"),
+    #     "file_type": "pdf",
+    #     "has_visuals": True,
+    #     "sample_queries": [
+    #         "What are the top Java ML libraries?",
+    #         "Give me the complete schedule week-wise.",
+    #         "What does the visual say?",
+    #         "List the machine learning frameworks for Java"
+    #     ]
+    # },
     
     "sales_report": {
         "filename": "sample w graph.pdf",

@@ -834,6 +834,7 @@ def admin_interface():
                 try:
                     with st.spinner(f"Processing {demo_file['File Name']}..."):
                         qa_state, error = process_demo_document(demo_file["demo_key"])
+                        print(f"Processed {demo_file['File Name']}, error: {error}")
                         if qa_state:
                             st.session_state.processed_documents[demo_file["File Name"]] = qa_state
                             st.session_state.admin_files_data["Ingested"].append("✓")
