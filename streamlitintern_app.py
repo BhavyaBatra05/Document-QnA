@@ -831,18 +831,20 @@ def admin_interface():
                 st.session_state.admin_files_data["Date"].append(demo_file["Date"])
                 st.session_state.admin_files_data["File Name"].append(demo_file["File Name"])
                 st.session_state.admin_files_data["IsActive"].append("✗")
-                
-                # Process with spinner
-                with st.spinner(f"Processing {demo_file['File Name']}..."):
-                    qa_state, error = process_demo_document(demo_file["demo_key"])
-                    
-                    if qa_state:
-                        st.session_state.processed_documents[demo_file["File Name"]] = qa_state
-                        st.session_state.admin_files_data["Ingested"].append("✓")
-                        st.success(f"✅ {demo_file['File Name']} processed!")
-                    else:
-                        st.session_state.admin_files_data["Ingested"].append("✗")
-                        st.error(f"❌ Failed: {demo_file['File Name']}")
+                try:
+                    with st.spinner(f"Processing {demo_file['File Name']}..."):
+                        qa_state, error = process_demo_document(demo_file["demo_key"])
+                        if qa_state:
+                            st.session_state.processed_documents[demo_file["File Name"]] = qa_state
+                            st.session_state.admin_files_data["Ingested"].append("✓")
+                            st.success(f"✅ {demo_file['File Name']} processed!")
+                        else:
+                            st.session_state.admin_files_data["Ingested"].append("✗")
+                            st.error(f"❌ Failed: {demo_file['File Name']} - {error}")
+                except Exception as e:
+                    st.session_state.admin_files_data["Ingested"].append("✗")
+                    st.error(f"Exception: {e}")
+                    print("Demo file processing exception:", e)
             
             # NO ST.RERUN() HERE!
             st.success("🎉 All demo documents processed successfully!")
