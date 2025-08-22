@@ -30,17 +30,31 @@ DEMO_DOCUMENTS = {
     #     ]
     # },
     
-    "sales_report": {
-        "filename": "sample w graph.pdf",
-        "display_name": "Sales Performance Report 2024 (PDF)",
-        "file_path": Path("./demo_files/sample w graph.pdf"),
+    # "sales_report": {
+    #     "filename": "sample w graph.pdf",
+    #     "display_name": "Sales Performance Report 2024 (PDF)",
+    #     "file_path": Path("./demo_files/sample w graph.pdf"),
+    #     "file_type": "pdf", 
+    #     "has_visuals": True,
+    #     "sample_queries": [
+    #         "What are the 2024 sales figures by region?",
+    #         "Describe the bar chart in the document",
+    #         "Which region has the highest sales?",
+    #         "Compare North America vs Asia performance"
+    #     ]
+    # },
+    
+    "Introduction": {
+        "filename": "Hello everyone",
+        "display_name": "Introduction (PDF)",
+        "file_path": Path("./demo_files/Hello everyone.pdf"),
         "file_type": "pdf", 
         "has_visuals": True,
         "sample_queries": [
-            "What are the 2024 sales figures by region?",
-            "Describe the bar chart in the document",
-            "Which region has the highest sales?",
-            "Compare North America vs Asia performance"
+            "What is the Document about?",
+            "What are the hobbies of Bhavya Batra?",
+            "Which class is Bhavya Batra in?",
+            "What is the age of Bhavya Batra?"
         ]
     }
 }
